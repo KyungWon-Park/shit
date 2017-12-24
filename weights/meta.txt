@@ -1,0 +1,11 @@
+# C1 param: (6, 1, 5, 5)  (150 parameters)
+# C1  bias: (6,)  (6 parameters)
+# C3 param: (16, 6, 5, 5)  (2400 parameters)
+# C3  bias: (16,)  (16 parameters)
+# F5 param: (120, 400)  (48000 parameters)
+# F5  bias: (120,)  (120 parameters)
+# F6 param: (84, 120)  (10080 parameters)
+# F6  bias: (84,)  (84 parameters)
+# output param: (10, 84)  (840 parameters)
+# output  bias: (10,)  (10 parameters)
+
