@@ -3,6 +3,7 @@
 #include <string.h>
 #include <math.h>
 #include "parser.h"
+#include "mnist_read.cpp"
 
 #define NUM_TEST_DATA 10000
 
@@ -181,6 +182,16 @@ int main(int argc, char *argv[])
 	int *test_label = malloc(sizeof(int) * NUM_TEST_DATA);
 
 	// LOAD test data and labels
+	float **data = malloc(sizeof(float) * NUM_TEST_DATA * 32 * 32);
+	int *label = malloc(sizeof(int) * NUM_TEST_DATA);
+	read_data(PATH_TEST_DATA, data);
+	read_label(PATH_TEST_LABEL, label);
+
+	memcpy(test_data, data, sizeof(float) * NUM_TEST_DATA * 32 * 32);
+	memcpy(test_label, label, sizeof(int) * NUM_TEST_DATA);
+
+	free(data);
+	free(label);
 
 	int cnt = 0;
 
@@ -204,7 +215,7 @@ int main(int argc, char *argv[])
 		check(output_result, test_label[i], &cnt);
 	}
 
-	float accuracy = cnt / NUM_TEST_DATA;
+	float accuracy = ((float) cnt) / ((float) NUM_TEST_DATA);
 	printf("Prediction accuracy: %f%%\n", accuracy * 100);
 
 	free(c1_result);
