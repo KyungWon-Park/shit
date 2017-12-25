@@ -327,7 +327,7 @@ int main(int argc, char *argv[])
 #ifndef DEBUG 
 	diff = clock() - start;
 	int msec = diff * 1000 / CLOCKS_PER_SEC;
-	printf("Elapsed time: %d seconds %d milliseconds", msec / 1000, msec % 1000);
+	printf("Elapsed time: %d seconds %d milliseconds\n", msec / 1000, msec % 1000);
 #endif 
 
 	float accuracy = ((float) cnt) / ((float) NUM_TEST);
