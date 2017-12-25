@@ -1,19 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <assert.h>
 #include "parser.h"
 
-#define NUM_TRAIN 60000
-#define NUM_TEST  10000
-#define RAW_DIM   28
-#define RAW_PIXELS_PER_IMG 784 			// 28x28, single channel image
-#define MNIST_SCALE_FACTOR 0.00390625	// 1/255
-#define MAXBYTE 255 
-
-const char* PATH_TRAIN_DATA = "/home/ic621/mnist/train-images-idx3-ubyte";
-const char* PATH_TRAIN_LABEL = "/home/ic621/mnist/train-labels-idx1-ubyte";
-const char* PATH_TEST_DATA = "/home/ic621/mnist/t10k-images-idx3-ubyte";
-const char* PATH_TEST_LABEL= "/home/ic621/mnist/t10k-labels-idx1-ubyte";
+#define DEBUG 1 
 
 void load_weights(__map__ *ptr_map)
 {
@@ -170,7 +157,7 @@ int reverse_int32(int i)
 	return ((int) byte1 << 24) + ((int) byte2 << 16) + ((int) byte3 << 8) + ((int) byte4);
 }
 
-void read_data(const char* datapath, float **data)
+void read_data(const char* datapath, float *data)
 {
 	printf("Starting to load MNIST data...\n");
 	// Open file 
@@ -202,15 +189,23 @@ void read_data(const char* datapath, float **data)
 	// Read actual MNIST data set (uint8 -> float)
 	for (int i = 0; i < number_of_images; i++)
 	{
-		data[i][0] = 1;
+#ifdef DEBUG 
+		printf("LOADING: %dth \n", i);
+#endif
 		for (int r = 0; r < n_rows; r++)
 		{
 			for (int c = 0; c < n_cols; c++)
 			{
 				unsigned char tmp = 0;
-				fread((char *) &tmp, sizeof(tmp), 1, fp);
-				data[i][(n_rows * r) + c] = (float) tmp * (float) MNIST_SCALE_FACTOR;
+				if ((r >= 2 || r <= 29) && (c >= 2 || c <= 29))
+				{
+					fread((char *) &tmp, sizeof(tmp), 1, fp);
+				}
+				data[(i * 32 * 32) + (n_rows * r) + c] = (float) tmp * (float) MNIST_SCALE_FACTOR;
 			}
+#ifdef DEBUG 
+			printf("LOADED: %dth \n", i);
+#endif
 		}
 	}
 	fclose(fp);
@@ -256,9 +251,9 @@ void printMNIST(float *data, int label)
 {
 	printf("Check data for label\n\n");
 
-	for (int r = 0; r < RAW_DIM; r++)
+	for (int r = 0; r < 32; r++)
 	{
-		for (int c = 0; c < RAW_DIM; c++)
+		for (int c = 0; c < 32; c++)
 		{
 			if (data[r * RAW_DIM + c] > 0.5f)
 			{
@@ -274,17 +269,3 @@ void printMNIST(float *data, int label)
 
 	return;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
