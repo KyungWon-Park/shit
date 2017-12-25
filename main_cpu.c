@@ -9,7 +9,15 @@ const char *PATH_TEST_LABEL= "./mnist/t10k-labels-idx1-ubyte";
 
 float sigmoid(float x)
 {
-	return (1 / (1 + exp(-1 * x)));
+	return (exp(x) / (1 + exp(x)));
+}
+
+void prompt(void)
+{
+		printf("Press enter to continue: \n");
+		char asdf;
+		fgets(&asdf, 100, stdin);
+		return;
 }
 
 void convolution(int num_input, int num_output, int height_input, int width_input, int size_filter, float *pre_filters, float *pre_inputs, float *pre_outputs)
@@ -34,6 +42,32 @@ void convolution(int num_input, int num_output, int height_input, int width_inpu
 
 	memcpy(inputs, pre_inputs, sizeof(float) * num_input * height_input * width_input);
 	memcpy(filters, pre_filters, sizeof(float) * num_output * num_input * size_filter * size_filter);
+
+#ifdef DEBUG
+	if (num_input == 1)
+	{
+		printf("PRINTING Input..\n");
+		printMNIST((float *) inputs, 0);
+	}
+	printf("PRINTING filters..\n");
+	for (int i = 0; i < num_output; i++)
+	{
+		for (int j = 0; j < num_input; j++)
+		{
+			for (int k = 0; k < size_filter; k++)
+			{
+				for (int l = 0; l < size_filter; l++)
+				{
+					printf("%f ", filters[i][j][k][l]);
+				}
+				printf("\n");
+			}
+			printf("\n ------------------------- \n");
+		}
+		printf("\n ------------------------------------------------- || \n");
+	}
+	prompt();
+#endif 
 
 	for (int o = 0; o < num_output; o++)
 	{// For each output image 
@@ -202,9 +236,9 @@ void output(int size_input, int size_output, float *input, float *output, float 
 
 void check(float *input, int label, int *cnt)
 {
-	float highestProb = 0;
+	float highestProb = input[0];
 	int ans = 0;
-	for (int i = 0; i < 10; i++)
+	for (int i = 1; i < 10; i++)
 	{
 		if (highestProb < input[i])
 		{
@@ -306,7 +340,7 @@ int main(int argc, char *argv[])
 		printMNIST(test_data + (i * 32 * 32), test_label[i]);
 		printf("Press enter to continue: \n");
 		char asdf;
-		fgets(&asdfs, 100, stdin);
+		fgets(&asdf, 100, stdin);
 #endif 
 	}
 

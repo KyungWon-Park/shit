@@ -190,16 +190,16 @@ void read_data(const char* datapath, float *data)
 #ifdef DEBUG 
 		printf("LOADING: %dth \n", i);
 #endif
-		for (int r = 0; r < 32; r++)
+		for (int r = 0; r < n_rows; r++)
 		{
-			for (int c = 0; c < 32; c++)
+			for (int c = 0; c < n_cols; c++)
 			{
 				unsigned char tmp = 0;
-				if ((r >= 2 && r <= 29) && (c >= 2 && c <= 29))
+				if ((r >= 2 || r <= 29) && (c >= 2 || c <= 29))
 				{
 					fread((char *) &tmp, sizeof(tmp), 1, fp);
 				}
-				data[(i * 32 * 32) + (32 * r) + c] = (float) tmp * (float) MNIST_SCALE_FACTOR;
+				data[(i * 32 * 32) + (n_rows * r) + c] = (float) tmp * (float) MNIST_SCALE_FACTOR;
 			}
 #ifdef DEBUG 
 			printf("LOADED: %dth \n", i);
@@ -253,7 +253,7 @@ void printMNIST(float *data, int label)
 	{
 		for (int c = 0; c < 32; c++)
 		{
-			if (data[r * 32 + c] > 0.5f)
+			if (data[r * RAW_DIM + c] > 0.5f)
 			{
 				printf("■");
 			}
