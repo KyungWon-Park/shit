@@ -3,9 +3,13 @@
 #include <string.h>
 #include <math.h>
 #include "parser.h"
-#include "mnist_read.cpp"
 
-#define NUM_TEST_DATA 10000
+#define NUM_TEST_DATA 10000 
+
+const char* PATH_TRAIN_DATA = "/home/ic621/mnist/train-images-idx3-ubyte";
+const char* PATH_TRAIN_LABEL = "/home/ic621/mnist/train-labels-idx1-ubyte";
+const char* PATH_TEST_DATA = "/home/ic621/mnist/t10k-images-idx3-ubyte";
+const char* PATH_TEST_LABEL= "/home/ic621/mnist/t10k-labels-idx1-ubyte";
 
 float sigmoid(float x)
 {
@@ -184,6 +188,7 @@ int main(int argc, char *argv[])
 	// LOAD test data and labels
 	float **data = malloc(sizeof(float) * NUM_TEST_DATA * 32 * 32);
 	int *label = malloc(sizeof(int) * NUM_TEST_DATA);
+
 	read_data(PATH_TEST_DATA, data);
 	read_label(PATH_TEST_LABEL, label);
 
@@ -198,19 +203,19 @@ int main(int argc, char *argv[])
 	for (int i = 0; i < NUM_TEST_DATA; i++)
 	{
 		// C1 convolution 
-		convolution(1, 6, 32, 32, 5, map.C1_param, &test_data[i * 32 * 32], c1_result);
+		convolution(1, 6, 32, 32, 5, (float *) map.C1_param, &test_data[i * 32 * 32], c1_result);
 		// S2 pooling 
 		pooling(6, 28, 28, c1_result, s2_result, map.C1_bias);
 		// C3 convolution 
-		convolution(6, 16, 14, 14, 5, map.C3_param, s2_result, c3_result);
+		convolution(6, 16, 14, 14, 5, (float *) map.C3_param, s2_result, c3_result);
 		// S4 pooling 
 		pooling(16, 10, 10, c3_result, s4_result, map.C3_bias);
 		// F5 full connection
-		fullyConnect(400, 120, s4_result, f5_result, map.F5_param, map.F5_bias);
+		fullyConnect(400, 120, s4_result, f5_result, (float *) map.F5_param, map.F5_bias);
 		// F6 full connection 
-		fullyConnect(120, 84, f5_result, f6_result, map.F6_param, map.F6_bias);
+		fullyConnect(120, 84, f5_result, f6_result, (float *) map.F6_param, map.F6_bias);
 		// Output layer 
-		output(84, 10, f6_result, output_result, map.OUTPUT_param, map.OUTPUT_bias);
+		output(84, 10, f6_result, output_result, (float *) map.OUTPUT_param, map.OUTPUT_bias);
 		// Check 
 		check(output_result, test_label[i], &cnt);
 	}
