@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <time.h>
 #include "parser.h"
 
 const char *PATH_TEST_DATA = "./mnist/t10k-images-idx3-ubyte";
@@ -42,32 +43,6 @@ void convolution(int num_input, int num_output, int height_input, int width_inpu
 
 	memcpy(inputs, pre_inputs, sizeof(float) * num_input * height_input * width_input);
 	memcpy(filters, pre_filters, sizeof(float) * num_output * num_input * size_filter * size_filter);
-
-#ifdef DEBUG
-	if (num_input == 1)
-	{
-		printf("PRINTING Input..\n");
-		printMNIST((float *) inputs, 0);
-	}
-	printf("PRINTING filters..\n");
-	for (int i = 0; i < num_output; i++)
-	{
-		for (int j = 0; j < num_input; j++)
-		{
-			for (int k = 0; k < size_filter; k++)
-			{
-				for (int l = 0; l < size_filter; l++)
-				{
-					printf("%f ", filters[i][j][k][l]);
-				}
-				printf("\n");
-			}
-			printf("\n ------------------------- \n");
-		}
-		printf("\n ------------------------------------------------- || \n");
-	}
-	prompt();
-#endif 
 
 	for (int o = 0; o < num_output; o++)
 	{// For each output image 
@@ -314,6 +289,11 @@ int main(int argc, char *argv[])
 	fgets(&asdfs, 100, stdin);
 #endif
 
+#ifndef DEBUG 
+	clock_t start = clock(), diff;
+
+#endif 
+
 	for (int i = 0; i < NUM_TEST; i++)
 	{
 #ifdef DEBUG 
@@ -343,6 +323,12 @@ int main(int argc, char *argv[])
 		fgets(&asdf, 100, stdin);
 #endif 
 	}
+
+#ifndef DEBUG 
+	diff = clock() - start;
+	int msec = diff * 1000 / CLOCKS_PER_SEC;
+	printf("Elapsed time: %d seconds %d milliseconds", msec / 1000, msec % 1000);
+#endif 
 
 	float accuracy = ((float) cnt) / ((float) NUM_TEST);
 	printf("Prediction accuracy: %f%%\n", accuracy * 100);
