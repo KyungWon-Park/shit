@@ -24,6 +24,6 @@ gpu_tile:
 
 gpu_tile_debug:
 
-gpu_mtx:
+gpu_matrix:
 
-gpu_mtx_debug:
+gpu_matrix_debug:
