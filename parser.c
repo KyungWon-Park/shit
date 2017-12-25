@@ -1,17 +1,15 @@
 #include "parser.h"
 
-#define DEBUG 1 
-
 void load_weights(__map__ *ptr_map)
 {
+	printf("Loading weight parameters...\n");
 	FILE *fp;
 	
 	// LOAD C1 BIAS
 	{
 		printf("LOADING C1_BIAS\n");
 		fp = fopen("./weights/C1_bias.txt", "r");
-		float tmp[6];
-		fscanf(fp, "%e %e %e %e %e %e", &tmp[0], &tmp[1], &tmp[2], &tmp[3], &tmp[4], &tmp[5]);
+		fscanf(fp, "%e %e %e %e %e %e", &(*ptr_map).C1_bias[0], &(*ptr_map).C1_bias[1], &(*ptr_map).C1_bias[2], &(*ptr_map).C1_bias[3], &(*ptr_map).C1_bias[4], &(*ptr_map).C1_bias[5]);
 		fclose(fp);
 	}
 

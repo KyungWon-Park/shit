@@ -4,7 +4,7 @@
 #include <math.h>
 #include "parser.h"
 
-#define NUM_TEST_DATA 10000 
+#define DEBUG 1
 
 const char *PATH_TEST_DATA = "./mnist/t10k-images-idx3-ubyte";
 const char *PATH_TEST_LABEL= "./mnist/t10k-labels-idx1-ubyte";
@@ -58,7 +58,7 @@ void convolution(int num_input, int num_output, int height_input, int width_inpu
 		}
 	}
 
-	memcpy(pre_filters, filters, sizeof(float) * num_output * num_input * size_filter * size_filter);
+	memcpy(pre_outputs, outputs, sizeof(float) * num_output * num_input * size_filter * size_filter);
 
 	return;
 }
@@ -165,8 +165,10 @@ void check(float *input, int label, int *cnt)
 
 int main(int argc, char *argv[])
 {
+	printf("Started...\n");
 	// Initialize map variable
 	__map__ map;
+	printf("Loading weights...\n");
 	load_weights(&map);	
 
 	// WARNING: MALLOC 
@@ -180,25 +182,31 @@ int main(int argc, char *argv[])
 	float *output_result = malloc(sizeof(float) * 10);
 
 	// WARNING: MALLOC 
-	float *test_data = malloc(sizeof(float) * NUM_TEST_DATA);
-	int *test_label = malloc(sizeof(int) * NUM_TEST_DATA);
+	float *test_data = malloc(sizeof(float) * NUM_TEST * 32 * 32);
+	int *test_label = malloc(sizeof(int) * NUM_TEST);
 
 	// LOAD test data and labels
-	float *data = malloc(sizeof(float) * NUM_TEST_DATA * 32 * 32);
-	int *label = malloc(sizeof(int) * NUM_TEST_DATA);
+	float *data = malloc(sizeof(float) * NUM_TEST * 32 * 32);
+	int *label = malloc(sizeof(int) * NUM_TEST);
+
+	printf("Malloc completed\n");
 
 	read_data(PATH_TEST_DATA, data);
 	read_label(PATH_TEST_LABEL, label);
 
-	memcpy(test_data, data, sizeof(float) * NUM_TEST_DATA * 32 * 32);
-	memcpy(test_label, label, sizeof(int) * NUM_TEST_DATA);
+	printf("Data read completed\n");
+
+	memcpy(test_data, data, sizeof(float) * NUM_TEST * 32 * 32);
+	memcpy(test_label, label, sizeof(int) * NUM_TEST);
 
 	free(data);
 	free(label);
 
+	printf("Data load completed\n");
+
 	int cnt = 0;
 
-	for (int i = 0; i < NUM_TEST_DATA; i++)
+	for (int i = 0; i < NUM_TEST; i++)
 	{
 		// C1 convolution 
 		convolution(1, 6, 32, 32, 5, (float *) map.C1_param, &test_data[i * 32 * 32], c1_result);
@@ -218,7 +226,7 @@ int main(int argc, char *argv[])
 		check(output_result, test_label[i], &cnt);
 	}
 
-	float accuracy = ((float) cnt) / ((float) NUM_TEST_DATA);
+	float accuracy = ((float) cnt) / ((float) NUM_TEST);
 	printf("Prediction accuracy: %f%%\n", accuracy * 100);
 
 	free(c1_result);

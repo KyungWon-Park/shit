@@ -5,7 +5,6 @@ const char *PATH_TEST_LABEL= "./mnist/t10k-labels-idx1-ubyte";
 
 int main(int argc, char *argv[])
 {
-	int n = atoi(argv[1]);
 	float *data = malloc(sizeof(float) * NUM_TEST * 32 * 32 * 10);
 	assert(data != NULL && "Failed to assign data\n");
 	int *labels = malloc(sizeof(int) * NUM_TEST * 10);
@@ -14,7 +13,14 @@ int main(int argc, char *argv[])
 	read_data(PATH_TEST_DATA, data);
 	read_label(PATH_TEST_LABEL, labels);
 
-	printMNIST(data + (n * 32 * 32), labels[n]);	
+	while (1)
+	{
+		printf("\nEnter index of image to see: ");
+		int n;
+		scanf("%d", &n);
+		printf("\n [ Number: %d ] \n\n", labels[n]);
+		printMNIST(data + (n * 32 * 32), labels[n]);	
+	}
 
 	free(data);
 	free(labels);
