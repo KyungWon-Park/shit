@@ -1,29 +1,28 @@
+commons = data.h parser.h parser.c
+
 clean:
 	rm *.out 
 
 test1:
-	gcc data.h parser.h parser.c unitTest_parser.c -o test_parser.out 
+	gcc $(commons) unitTest_parser.c -o test_parser.out 
 
 test2:
-	gcc data.h parser.h parser.c unitTest_parser2.c -o test2_parser.out
+	gcc $(commons) unitTest_parser2.c -o test2_parser.out
 
 cpu:
-	gcc data.h parser.h parser.c main_cpu.c -lm -O3 -o cnn_cpu.out 
+	gcc $(commons) main_cpu.c -lm -O3 -o cnn_cpu.out 
 
 cpu_debug:
-	gcc data.h parser.h parser.c main_cpu_debug.c -lm -g -o cnn_cpu_db.out 
+	gcc $(commons) main_cpu_debug.c -lm -g -o cnn_cpu_db.out 
 
 cpu_debug_exe:
-	gcc data.h parser.h parser.c main_cpu.c -lm -g -o cnn_cpu_db_exe.out 
+	gcc $(commons)  main_cpu.c -lm -g -o cnn_cpu_db_exe.out 
 
 gpu:
-
-gpu_debug:
+	nvcc $(commons) main_gpu.c basic_gpu.cu -lm -O3 -o cnn_gpu_basic.out 
 
 gpu_tile:
-
-gpu_tile_debug:
+	nvcc $(commons) main_gpu.c tile_gpu.cu -lm -O3 -o cnn_gpu_tile.out 
 
 gpu_matrix:
-
-gpu_matrix_debug:
+	nvcc $(commons) main_gpu.c matrix_gpu.cu -lm -O3 -o cnn_gpu_matrix.out 
