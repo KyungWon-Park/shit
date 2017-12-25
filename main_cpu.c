@@ -109,7 +109,7 @@ void pooling(int num_output, int height_input, int width_input, float *pre_input
 				{// 2x2 window, row 
 					for (int s_w = 0; s_w < 2; s_w++)
 					{// 2x2 window, column
-						outputs[o][h][w] = outputs[o][h][w] + inputs[o][2 * h + s_h][2 * w + s_w] / (2 * 2);
+						outputs[o][h][w] += inputs[o][2 * h + s_h][2 * w + s_w] / (2 * 2);
 					}
 				}
 
