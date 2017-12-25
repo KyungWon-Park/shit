@@ -28,7 +28,21 @@ $ make gpu_matrix
 $ ./cnn_gpu_matrix.out 
 </code></pre>
 
-# UNIT TEST
+# DEBUG MODE 
+
+## 0. CPU - Interactive version
+<pre><code>
+$ make cpu_debug
+$ ./cnn_cpu_db.out 
+</code></pre>
+
+## 1. CPU - Execution version for valgrind analysis
+<pre><code>
+$ make cpu_debug_exe 
+$ ./cnn_cpu_db_exe.out
+</code></pre>
+
+# UNIT TEST MODE 
 
 ## 0. Test MNIST data load
 <pre><code>
