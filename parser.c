@@ -247,7 +247,7 @@ void read_label(const char *labelPath, int *labels)
 
 void printMNIST(float *data, int label)
 {
-	printf("Check data for label\n\n");
+	printf("LABEL answer: %d\n", label);
 
 	for (int r = 0; r < 32; r++)
 	{

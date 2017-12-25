@@ -11,7 +11,10 @@ cpu:
 	gcc data.h parser.h parser.c main_cpu.c -lm -O3 -o cnn_cpu.out 
 
 cpu_debug:
-	gcc data.h parser.h parser.c main_cpu.c -lm -g -o cnn_cpu_db.out 
+	gcc data.h parser.h parser.c main_cpu_debug.c -lm -g -o cnn_cpu_db.out 
+
+cpu_debug_exe:
+	gcc data.h parser.h parser.c main_cpu.c -lm -g -o cnn_cpu_db_exe.out 
 
 gpu:
 

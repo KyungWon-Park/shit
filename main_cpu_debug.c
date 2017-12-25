@@ -4,6 +4,8 @@
 #include <math.h>
 #include "parser.h"
 
+#define DEBUG 1
+
 const char *PATH_TEST_DATA = "./mnist/t10k-images-idx3-ubyte";
 const char *PATH_TEST_LABEL= "./mnist/t10k-labels-idx1-ubyte";
 
