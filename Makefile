@@ -19,10 +19,10 @@ cpu_debug_exe:
 	gcc $(commons)  main_cpu.c -lm -g -o cnn_cpu_db_exe.out 
 
 gpu:
-	nvcc $(commons) main_gpu.c basic_gpu.cu -lm -O3 -o cnn_gpu_basic.out 
+	nvcc $(commons) main_gpu.c basic_gpu.cu -DBASIC-lm -O3 -o cnn_gpu_basic.out 
 
 gpu_tile:
-	nvcc $(commons) main_gpu.c tile_gpu.cu -lm -O3 -o cnn_gpu_tile.out 
+	nvcc $(commons) main_gpu.c tile_gpu.cu -DTILE -lm -O3 -o cnn_gpu_tile.out 
 
 gpu_matrix:
-	nvcc $(commons) main_gpu.c matrix_gpu.cu -lm -O3 -o cnn_gpu_matrix.out 
+	nvcc $(commons) main_gpu.c matrix_gpu.cu -DMATRIX -lm -O3 -o cnn_gpu_matrix.out 

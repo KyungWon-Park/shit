@@ -1,0 +1,19 @@
+* GPU SPEC 
+	WARP_SIZE: 32 threads
+	WORD_SIZE: 4B
+
+* SM specs
+	Max warps / SM: 64
+	Max thread blocks / SM: 32 
+	Max threads / SM: 2048
+	Max registers / SM: 65536 words
+
+	Shared Memory / SM: 64kB
+	CUDA cores / SM: 64 
+
+* Block specs 
+	Max threads / block: 1024 
+	Max registers / block: 65536 words 
+
+* Thread specs 
+	Max registers / thread: 255 words

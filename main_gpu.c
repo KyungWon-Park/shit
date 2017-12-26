@@ -5,15 +5,15 @@
 #include "parser.h"
 
 #ifdef BASIC
-#include "basic_gpu.c"
+#include "basic_gpu.cu"
 #endif 
 
 #ifdef TILE
-#include "tile_gpu.c"
+#include "tile_gpu.cu"
 #endif 
 
 #ifdef MATRIX
-#include "matrix_gpu.c"
+#include "matrix_gpu.cu"
 #endif
 
 const char *PATH_TEST_DATA = "./mnist/t10k-images-idx3-ubyte";
@@ -48,7 +48,7 @@ int main(int argc, char *argv[])
 	clock_t start = clock(), diff;
 #endif 
 
-	forward_GPU();
+	forward_GPU(&test_data, &test_label, &map, &cnt_correct);
 
 #ifndef DEBUG 
 	diff = clock() - start;
