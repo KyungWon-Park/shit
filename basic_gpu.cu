@@ -6,10 +6,10 @@
 #include <assert.h>
 #include "parser.h"
 
-#define BATCH_SIZE 32 
+#define BATCH_SIZE 20
 /* BATCH_SIZE 
    *
-   * Why use BATCH_SIZE ?
+   * Why use BATCH_SIZE ? (Multiple images at once)
    *
    * 0. Saturate Streaming Multiprocessors with enough computaion BLOCKS
    * 1. Saturate Video RAM with enough computaional jobs
@@ -39,6 +39,11 @@
    *
    * THREAD SPEC:
    * 	- max_registers: 255 words 
+   *
+   * SHARED MEMORY SPEC:
+   * 	- 64 kB per SM 
+   * 	- Composed of 32 memory bank hardwares
+   * 	- Does bank interleaving per every word (4 Bytes)
    *
    */
 
@@ -92,6 +97,7 @@ convolution_kernel(
 	float *inputs, float *outputs
 )
 {
+	// Get index info 
 	int BID_x = blockIdx.x; 	// foreach: output image 	~6 or ~16 
 	int BID_y = blockIdx.y; 	// foreach: BATCH among curr_step_inputs[BATCH_SIZE] 
 	int TID_x = threadIdx.x; 	// foreach: output image row 	~28 or ~10 
@@ -105,17 +111,17 @@ convolution_kernel(
 
 		// Load data into shared memory
 		__shared__ float input[32][32];
-		for (int i = 0; i < 2; i++)
+		// Do shared memory access in 32 stride to avoid shared memory bank conflict
+		int myCnt = 28 * TID_x + TID_y;
+		if (myCnt < 32)
 		{
-			int rp = 28 * i + TID_x;
-			int cp = 28 * i + TID_y;
-			if (rp < height_input && cp < width_input)
+			for (int i = 0; i < 32; i++)
 			{
-				input[rp][cp] = input_start[(32 * rp) + cp];
+				input[i][myCnt] = input_start[(32 * i) + myCnt]; 
 			}
 		}
 		__syncthreads();
-		__shared__ float filter[5][5];
+		__shared__ float filter[5][5]; 	// Only 25 entries -> No shared memory bank conflict 
 		if (TID_x < size_filter && TID_y < size_filter) 
 		{
 			filter[TID_x][TID_y] = (*d_map).C1_param[BID_x][0][TID_x][TID_y]; 
@@ -137,20 +143,20 @@ convolution_kernel(
 		float *input_start = inputs + (BID_y * (14 * 14));
 		
 		for (int c = 0; c < num_input; c++)
-		{
+		{// For every input channel, which isn't 1 for C3 layer
 			// Load data into shared memory 
 			__shared__ float input[14][14];
-			for (int i = 0; i < 2; i++)
+			// Do shared memory access in 14 strides to avoid shared memory bank conflict 
+			int myCnt = 10 * TID_x + TID_y;
+			if (myCnt < 14)
 			{
-				int rp = 14 * i + TID_x;
-				int cp = 14 * i + TID_y;
-				if (rp < height_input && rp < width_input)
+				for (int i = 0; i < 14; i++)
 				{
-					input[rp][cp] = input_start[(32 * rp) + cp];
+					input[i][myCnt] = input_start[(14 * i) + myCnt];
 				}
 			}
 			__syncthreads();
-			__shared__ float filter[5][5];
+			__shared__ float filter[5][5]; 	// Only 25 entries -> No shared memory bank conflict 
 			if (TID_x < size_filter && TID_y < size_filter)
 			{
 				filter[TID_x][TID_y] = (*d_map).C3_param[BID_x][c][TID_x][TID_y];
@@ -179,11 +185,40 @@ pooling_kernel(
 	float *inputs, float *outputs 
 )
 {
+	// Get index info 
+	int BID_x = blockIdx.x; 	// foreach: output image 	~6 or ~16 
+	int BID_y = blockIdx.y; 	// foreach: BATCH among curr_step_inputs[BATCH_SIZE] 
+	int TID_x = threadIdx.x; 	// foreach: output image row 	~14 or ~5
+	int TID_y = threadIdx.y; 	// foreach: output image column 	~14 or ~5
+
+	float acc = 0;
 	if (stage == 2)
 	{// S2_layer pooling: D_BATCH_SIZE * { Sigmoid([6 @ 28 * 28] + bias[6]) => [6 @ 14 * 14] }
+	 	// No need to load C1_bias since it will be cached into L1
+		float *input_start = inputs + (BID_y * 6 * 28 * 28) + (BID_x * 28 * 28);
+	 	for (int s_row = 0; s_row < 2; s_row++)
+	 	{
+		 	for (int s_col = 0; s_col < 2; s_col++)
+		 	{
+				acc += input_start[(28 * (2 * TID_x + s_row)) + (2 * TID_y + s_col)] / 4;
+		 	}
+	 	}
+	 
+	 	output[(BID_y * 6 * 14 * 14) + (BID_x * 14 * 14) + (TID_x * 14) + TID_y] = sigmoid(acc + (*d_map).C1_bias[BID_x]);
 	}
 	else // Desired stage = 4
 	{// S4_layer pooling: D_BATCH_SIZE * { Sigmoid([16 @ 10 * 10] + bias[16]) => [16 @ 5 * 5] }
+		// No need to load C3_bias since it will be cached into L1 
+		float *input_start = inputs + (BID_y * 16 * 10 * 10) + (BID_x * 10 * 10);
+		for (int s_row = 0; s_row < 2; s_row++)
+		{
+			for (int s_col = 0; s_col < 2; s_col++)
+			{
+				acc += input_start[(10 * (2 * TID_x + s_row)) + (2 * TID_y + s_col)] / 4;
+			}
+		}
+
+		output[(BID_y * 16 * 5 * 5) + (BID_x * 5 * 5) + (TID_x * 5) + TID_y] = sigmoid(acc + (*d_map).C3_bias[BID_x]); 
 	}
 	return;
 }
@@ -196,11 +231,69 @@ fullyConnect_kernel(
 	float *inputs, float *outputs 
 )
 {
+	// This layer is pretty much simple matrix multipliction of (ex [120][400] X [400][1] => [120][1] )
+	int BID_x = blockIdx.x; 	// I will divide [120][140] into 4 segments, to acquire more blocks for latency hiding 
+	int BID_y = blockIdx.y; 	// Unit position in BATCH_SIZE 
+	int TID_x = threadIdx.x; 	// Thread ID. threads ~400 or ~120
 	if (stage == 5)
 	{// F5_layer full connection: D_BATCH_SIZE * { Sigmoid([120 * 400] X Serial[16 @ 5 * 5] + bias[120 * 1]) => [120 * 1] }
+		// Load input data into shared memory 
+		// Loading F5_param is unnecessary, since elements in F5_param are only for one-shot use 
+		__shared__ float prod_elementwise[400];
+		__shared__ float input[400];
+		if (TID_x < 20)
+		{// Take 20 strides to avoid shared memory bank conflict
+			for (int i = 0; i < (400 / 20); i++)
+			{
+				input[(i * 20) + TID_x] = inputs[(BID_y * 400) + (i * 20) + TID_x]; 
+			}
+		}
+		__syncthreads();
+
+		for (int i = 0; i < (120 / 4); i++)
+		{
+			prod_elementwise[TID_x] = (*d_map_spill).F5_param[((BID_x * (120 / 4)) + i)][TID_x];
+			__syncthreads();
+			if (TID_x == 0)
+			{
+				float prod_sum = 0;
+				for (int j = 0; j < 400; j++)
+				{
+					prod_sum += prod_elementwise[j];
+				}
+				outputs[(BID_y * 120) + (BID_x * (120 / 4)) + i] = sigmoid(prod_sum + (*d_map).F5_bias[(BID_x * (120 / 4) + i)]);
+			}
+		}
 	}
 	else // Desired stage = 6
 	{// F6_layer full connection: D_BATCH_SIZE * { Sigmoid([84 * 120] X [120 * 1] + bias[84 * 1]) => [84 * 1] }
+		// Load input data into shared memory 
+		// Loading F6_param is unnecessary, since elements in F6_param are only for one-shot use 
+		__shared__ float prod_elementwise[120];
+		__shared__ float input[120];
+		if (TID_x < 20)
+		{// Take 20 strides to avoid shared memory bank conflict 
+			for (int i = 0; i < (120 / 20); i++)
+			{
+				input[(i * 20) + TID_x] = inputs[(BID_y * 120) + (i * 20) + TID_x];
+			}
+		}
+		__syncthreads();
+
+		for (int i = 0; i < (84 / 4); i++)
+		{
+			prod_elementwise[TID_x] = (*d_map).F6_param[(BID_x * (120 / 4)) + i][TID_x];
+			__syncthreads();
+			if (TID_x == 0)
+			{
+				float prod_sum = 0;
+				for (int j = 0; j < 120; j++)
+				{
+					prod_sum += prod_elementwise[j];
+				}
+				outputs[(BID_y * 84) + (BID_x * (84 / 4)) + i] = sigmoid(prod_sum + (*d_map).F6_bias[(BID_x * (84 / 4)) + i];
+			}
+		}
 	}
 	return;
 }
@@ -214,6 +307,48 @@ output_kernel(
 )
 {
 	// OUTPUT_layer: D_BATCH_SIZE * { [10 * 84] X [84 * 1] + [10 * 1] => [10 * 1] }
+	// Get index info 
+	int BID_y = blockIdx.y; 	// foreach: BATCH among curr_step_inputs[BATCH_SIZE] 
+	int TID_x = threadIdx.x; 	// foreach: elements in a row 
+	
+	// Load data into shared memory 
+	__shared__ float OUTPUT_param[10][84];
+	if (TID_x < 21)
+	{
+		for (int i = 0; i < 10; i++)
+		{
+			for (int j = 0; j < 4; k++)
+			{
+				OUTPUT_param[i][(j * 21) + TID_x] = (*d_map).OUTPUT_param[i][(j * 21) + TID_x];
+			}
+		}
+	}
+	__syncthreads();	
+	__shared__ float input[84];
+	if (TID_x < 21)
+	{
+		for (int i = 0; i < 4; i++)
+		{
+			input[(i * 21) + TID_x] = inputs[(BID_y * 84) + (i * 21) + TID_x];
+		}
+	}
+	__syncthreads();
+
+	__shared__ float prod_elementwise[84];
+	for (int i = 0; i < 10; i++)
+	{
+		prod_elementwise[TID_x] = input[TID_x] * OUTPUT_param[i][TID_x];
+		__syncthreads();
+		if (TID_x == 0)
+		{
+			float prod_sum = 0;
+			for (int j = 0; j < 84; j++)
+			{
+				prod_sum += prod_elementwise[j];
+			}
+			outputs[(curr_step * D_BATCH_SIZE * 10) + (BID_y * 10) + i] = prod_sum + (*d_map).OUTPUT_bias[i];
+		}
+	}
 	return;
 }
 
@@ -223,7 +358,26 @@ numberDetermine_kernel(
 	float *inputs, int *outputs
 )
 {
-	// NUMBER_layer: D_BATCH_SIZE * { ReduceMax[10 * 1] => SINGLE_DIGIT }
+	// NUMBER_layer: D_NUM_TEST * { ReduceMax[10 * 1] => SINGLE_DIGIT }
+	// Get index info 
+	int BID_x = blockIdx.x; // 100
+	int TID_x = threadIdx.x; // 100
+
+	int index_image = (BID_x * 100) + TID_x;
+
+	float highest_prob = inputs[(index_image * 10) + 0];
+	int ans = 0;
+
+	for (int i = 1; i < 10; i++)
+	{
+		if (inputs[(index_image * 10) + i] > highest_prob)
+		{
+			highest_prob = inputs[(index_image * 10) + i];
+			ans = i;
+		}
+	}
+
+	outputs[index_image] = ans;
 	return;
 }
 
@@ -235,7 +389,7 @@ void forward_GPU(float **ptr_test_data, int **ptr_test_label, __map__ *map, int 
 	// Acquire memory space in GPU 
 	// Prefix "d_" means ADDRESS in device memory 
 	// Handlers for device memory manipulation
-	int inferences[BATCH_SIZE];
+	int *inferences = malloc(sizeof(int) * NUM_TEST);
 	int *d_inferences;
 
 	float *d_test_data;
@@ -275,8 +429,8 @@ void forward_GPU(float **ptr_test_data, int **ptr_test_label, __map__ *map, int 
 	int batch_size = BATCH_SIZE;
 
 	// WARNING: MALLOC 0
-	cudaMalloc((void **) &d_inferences, sizeof(int) * BATCH_SIZE);
-	cudaMalloc((void **) &d_test_data, sizeof(float) * d_NUM_TEST * 32 * 32);
+	cudaMalloc((void **) &d_inferences, sizeof(int) * NUM_TEST);
+	cudaMalloc((void **) &d_test_data, sizeof(float) * NUM_TEST * 32 * 32);
 	cudaMalloc((void **) &d_map_spill, sizeof(__gpu_map_spill__));
 	cudaMalloc((void **) &d_c1_results, sizeof(float) * BATCH_SIZE * 6 * 28 * 28);
 	cudaMalloc((void **) &d_s2_results, sizeof(float) * BATCH_SIZE * 6 * 14 * 14);
@@ -284,7 +438,7 @@ void forward_GPU(float **ptr_test_data, int **ptr_test_label, __map__ *map, int 
 	cudaMalloc((void **) &d_s4_results, sizeof(float) * BATCH_SIZE * 16 * 5 * 5);
 	cudaMalloc((void **) &d_f5_results, sizeof(float) * BATCH_SIZE * 120);
 	cudaMalloc((void **) &d_f6_results, sizeof(float) * BATCH_SIZE * 84);
-	cudaMalloc((void **) &d_output_results, sizeof(float) * BATCH_SIZE * 10);
+	cudaMalloc((void **) &d_output_results, sizeof(float) * NUM_TEST * 10);
 
 	// CUDA memcpy from host to device 
 	cudaMemcpyToSymbol(D_NUM_TEST, &d_NUM_TEST, sizeof(int), 0, cudaMemcpyHostToDevice);
@@ -316,29 +470,24 @@ void forward_GPU(float **ptr_test_data, int **ptr_test_label, __map__ *map, int 
 		// 5. Fully connected layer F6
 
 		// 6. Output layer OUTPUT
+	}
 
-		// 7. Determine number 
+	// 7. Determine number
 
-		// 8. Update cnt_correct
-		cudaMemcpy(inferences, d_inferences, sizeof(int) * BATCH_SIZE, cudaMemcpyDeviceToHost);
-		for (int i = 0; i < BATCH_SIZE; i++)
-		{// For every result numbers in BATCH
-			int index = (step * BATCH_SIZE) + i;
-			if (index >= NUM_TEST)
-			{// Check that our BATCH didn't go out of NUM_TEST 
-				break;
-			}
-			else 
-			{// If this inferences[i] is valid result, 
-				if (inferences[i] == test_label[index])
-				{// If such inferences[i] is same with test_label[index], increment cnt_correct counter
-					(*cnt_correct)++;
-				}
-			}
+	// 8. Copy inference answers to Host 
+	cudaMemcpy(inferences, d_inferences, sizeof(int) * NUM_TEST, cudaMemcpyDeviceToHost);
+
+	// 9. Scoring
+	for (int i = 0; i < NUM_TEST; i++)
+	{
+		if (inference[i] == test_label[i])
+		{
+			(*cnt_correct)++;
 		}
 	}
 
 	// WARNING: FREE 0
+	free(inferences);
 	cudaFree(d_inferences);
 	cudaFree(d_map_spill);
 	cudaFree(d_test_data);
