@@ -93,7 +93,7 @@ __global__ void 	// Convolution computation kernel
 convolution_kernel(
 	int curr_step, int stage,
 	int num_output, int num_input, int height_input, int width_input,
-	int size_filter, __gpu_map__ *d_map,
+	int size_filter,
 	float *inputs, float *outputs
 )
 {
@@ -124,7 +124,7 @@ convolution_kernel(
 		__shared__ float filter[5][5]; 	// Only 25 entries -> No shared memory bank conflict 
 		if (TID_x < size_filter && TID_y < size_filter) 
 		{
-			filter[TID_x][TID_y] = (*d_map).C1_param[BID_x][0][TID_x][TID_y]; 
+			filter[TID_x][TID_y] = d_map.C1_param[BID_x][0][TID_x][TID_y]; 
 		}
 		__syncthreads();
 
@@ -159,7 +159,7 @@ convolution_kernel(
 			__shared__ float filter[5][5]; 	// Only 25 entries -> No shared memory bank conflict 
 			if (TID_x < size_filter && TID_y < size_filter)
 			{
-				filter[TID_x][TID_y] = (*d_map).C3_param[BID_x][c][TID_x][TID_y];
+				filter[TID_x][TID_y] = d_map.C3_param[BID_x][c][TID_x][TID_y];
 			}
 			__syncthreads();
 
@@ -181,7 +181,6 @@ __global__ void 	// Pooling computation kernel
 pooling_kernel(
 	int curr_step, int stage,
 	int num_output, int height_input, int width_input,
-	__gpu_map__ *d_map,
 	float *inputs, float *outputs 
 )
 {
@@ -204,7 +203,7 @@ pooling_kernel(
 		 	}
 	 	}
 	 
-	 	output[(BID_y * 6 * 14 * 14) + (BID_x * 14 * 14) + (TID_x * 14) + TID_y] = sigmoid(acc + (*d_map).C1_bias[BID_x]);
+	 	outputs[(BID_y * 6 * 14 * 14) + (BID_x * 14 * 14) + (TID_x * 14) + TID_y] = sigmoid(acc + d_map.C1_bias[BID_x]);
 	}
 	else // Desired stage = 4
 	{// S4_layer pooling: D_BATCH_SIZE * { Sigmoid([16 @ 10 * 10] + bias[16]) => [16 @ 5 * 5] }
@@ -218,7 +217,7 @@ pooling_kernel(
 			}
 		}
 
-		output[(BID_y * 16 * 5 * 5) + (BID_x * 5 * 5) + (TID_x * 5) + TID_y] = sigmoid(acc + (*d_map).C3_bias[BID_x]); 
+		outputs[(BID_y * 16 * 5 * 5) + (BID_x * 5 * 5) + (TID_x * 5) + TID_y] = sigmoid(acc + d_map.C3_bias[BID_x]); 
 	}
 	return;
 }
@@ -227,7 +226,7 @@ __global__ void 	// Fully connecting computation kernel
 fullyConnect_kernel(
 	int curr_step, int stage,
 	int size_input, int size_output,
-	__gpu_map__ *d_map, __gpu_map_spill__ *d_map_spill,
+	__gpu_map_spill__ *d_map_spill,
 	float *inputs, float *outputs 
 )
 {
@@ -252,7 +251,7 @@ fullyConnect_kernel(
 
 		for (int i = 0; i < (120 / 4); i++)
 		{
-			prod_elementwise[TID_x] = (*d_map_spill).F5_param[((BID_x * (120 / 4)) + i)][TID_x];
+			prod_elementwise[TID_x] = (*d_map_spill).F5_param[((BID_x * (120 / 4)) + i)][TID_x] * input[TID_x];
 			__syncthreads();
 			if (TID_x == 0)
 			{
@@ -261,7 +260,7 @@ fullyConnect_kernel(
 				{
 					prod_sum += prod_elementwise[j];
 				}
-				outputs[(BID_y * 120) + (BID_x * (120 / 4)) + i] = sigmoid(prod_sum + (*d_map).F5_bias[(BID_x * (120 / 4) + i)]);
+				outputs[(BID_y * 120) + (BID_x * (120 / 4)) + i] = sigmoid(prod_sum + d_map.F5_bias[(BID_x * (120 / 4) + i)]);
 			}
 		}
 	}
@@ -282,7 +281,7 @@ fullyConnect_kernel(
 
 		for (int i = 0; i < (84 / 4); i++)
 		{
-			prod_elementwise[TID_x] = (*d_map).F6_param[(BID_x * (120 / 4)) + i][TID_x];
+			prod_elementwise[TID_x] = d_map.F6_param[(BID_x * (120 / 4)) + i][TID_x] * input[TID_x];
 			__syncthreads();
 			if (TID_x == 0)
 			{
@@ -291,7 +290,7 @@ fullyConnect_kernel(
 				{
 					prod_sum += prod_elementwise[j];
 				}
-				outputs[(BID_y * 84) + (BID_x * (84 / 4)) + i] = sigmoid(prod_sum + (*d_map).F6_bias[(BID_x * (84 / 4)) + i];
+				outputs[(BID_y * 84) + (BID_x * (84 / 4)) + i] = sigmoid(prod_sum + d_map.F6_bias[(BID_x * (84 / 4)) + i]);
 			}
 		}
 	}
@@ -302,7 +301,7 @@ __global__ void 	// Output layer compuation kernel
 output_kernel(
 	int curr_step, int stage,
 	int size_input, int size_output,
-	__gpu_map__ *d_map, __gpu_map_spill__ *d_map_spill,
+	__gpu_map_spill__ *d_map_spill,
 	float *inputs, float *outputs
 )
 {
@@ -317,9 +316,9 @@ output_kernel(
 	{
 		for (int i = 0; i < 10; i++)
 		{
-			for (int j = 0; j < 4; k++)
+			for (int j = 0; j < 4; j++)
 			{
-				OUTPUT_param[i][(j * 21) + TID_x] = (*d_map).OUTPUT_param[i][(j * 21) + TID_x];
+				OUTPUT_param[i][(j * 21) + TID_x] = d_map.OUTPUT_param[i][(j * 21) + TID_x];
 			}
 		}
 	}
@@ -337,7 +336,7 @@ output_kernel(
 	__shared__ float prod_elementwise[84];
 	for (int i = 0; i < 10; i++)
 	{
-		prod_elementwise[TID_x] = input[TID_x] * OUTPUT_param[i][TID_x];
+		prod_elementwise[TID_x] = OUTPUT_param[i][TID_x] * input[TID_x];
 		__syncthreads();
 		if (TID_x == 0)
 		{
@@ -346,7 +345,7 @@ output_kernel(
 			{
 				prod_sum += prod_elementwise[j];
 			}
-			outputs[(curr_step * D_BATCH_SIZE * 10) + (BID_y * 10) + i] = prod_sum + (*d_map).OUTPUT_bias[i];
+			outputs[(curr_step * D_BATCH_SIZE * 10) + (BID_y * 10) + i] = prod_sum + d_map.OUTPUT_bias[i];
 		}
 	}
 	return;
@@ -441,9 +440,12 @@ void forward_GPU(float **ptr_test_data, int **ptr_test_label, __map__ *map, int 
 	cudaMalloc((void **) &d_output_results, sizeof(float) * NUM_TEST * 10);
 
 	// CUDA memcpy from host to device 
-	cudaMemcpyToSymbol(D_NUM_TEST, &d_NUM_TEST, sizeof(int), 0, cudaMemcpyHostToDevice);
-	cudaMemcpyToSymbol(D_BATCH_SIZE, &batch_size, sizeof(int), 0, cudaMemcpyHostToDevice);
-	cudaMemcpyToSymbol(d_map, tmp_map, sizeof(__gpu_map__), 0, cudaMemcpyHostToDevice);
+	//cudaMemcpyToSymbol(D_NUM_TEST, &d_NUM_TEST, sizeof(int), 0, cudaMemcpyHostToDevice);
+	//cudaMemcpyToSymbol(D_BATCH_SIZE, &batch_size, sizeof(int), 0, cudaMemcpyHostToDevice);
+	//cudaMemcpyToSymbol(d_map, tmp_map, sizeof(__gpu_map__), 0, cudaMemcpyHostToDevice);
+	cudaMemcpyToSymbol(D_NUM_TEST, &d_NUM_TEST, sizeof(int));
+	cudaMemcpyToSymbol(D_BATCH_SIZE, &batch_size, sizeof(int));
+	cudaMemcpyToSymbol(d_map, tmp_map, sizeof(__gpu_map__));
 	cudaMemcpy(d_map_spill, tmp_map_spill, sizeof(__gpu_map_spill__), 0, cudaMemcpyHostToDevice);
 
 	// WARNING: FREE 1
@@ -456,23 +458,78 @@ void forward_GPU(float **ptr_test_data, int **ptr_test_label, __map__ *map, int 
 	dim3 thread;
 	for (int step = 0; (step * BATCH_SIZE) < d_NUM_TEST; step++)
 	{// Advance step by step, with BATCH_SIZE stride 
-		// START
-		// 0. Convolution layer C1
+		// 0. Convolution layer C1 
+		block.x = 6;
+		block.y = BATCH_SIZE;
+		block.z = 1;
+		thread.x = 28;
+		thread.y = 28;
+		thread.z = 1;
+		convolution_kernel<<<block, thread>>>(step, 1, 6, 1, 32, 32, 5, d_test_data, d_c1_results);
 
 		// 1. Pooling layer S2 
+		block.x = 6;
+		block.y = BATCH_SIZE;
+		block.z = 1;
+		thread.x = 14;
+		thread.y = 14;
+		thread.z = 1;
+		pooling_kernel<<<block, thread>>>(step, 2, 6, 28, 28, d_c1_results, d_s2_results);
+		
+		// 2. Convolution layer C3 
+		block.x = 16;
+		block.y = BATCH_SIZE;
+		block.z = 1;
+		thread.x = 10;
+		thread.y = 10;
+		thread.z = 1;
+		convolution_kernel<<<block, thread>>>(step, 3, 16, 6, 14, 14, 5, d_s2_results, d_c3_results);
 
-		// 2. Convolution layer C3
+		// 3. Pooling layer S4 
+		block.x = 16;
+		block.y = BATCH_SIZE;
+		block.z = 1;
+		thread.x = 5;
+		thread.y = 5;
+		thread.z = 1;
+		pooling_kernel<<<block, thread>>>(step, 4, 16, 10, 10, d_c3_results, d_s4_results);
 
-		// 3. Pooling layer S4
+		// 4. Fully connected layer F5 
+		block.x = 4;
+		block.y = BATCH_SIZE;
+		block.z = 1;
+		thread.x = 400;
+		thread.y = 1;
+		thread.z = 1;
+		fullyConnect_kernel<<<block, thread>>>(step, 5, 400, 120, d_map_spill, d_s4_results, d_f5_results);
 
-		// 4. Fully connected layer F5
+		// 5. Fully connected layer F6 
+		block.x = 4;
+		block.y = BATCH_SIZE;
+		block.z = 1;
+		thread.x = 120;
+		thread.y = 1;
+		thread.z = 1;
+		fullyConnect_kernel<<<block, kernel>>>(step, 6, 120, 84, d_map_spill, d_f5_results, d_f6_results);
 
-		// 5. Fully connected layer F6
-
-		// 6. Output layer OUTPUT
+		// 6. Output layer OUTPUT 
+		block.x = 1;
+		block.y = BATCH_SIZE;
+		block.z = 1;
+		thread.x = 84;
+		thread.y = 1;
+		thread.z = 1;
+		output_kernel<<<block, kernel>>>(step, 7, 84, 10, d_map_spill, d_f6_results, d_output_results);
 	}
 
-	// 7. Determine number
+	// 7. Determine numbers
+	block.x = 100;
+	block.y = 1;
+	block.z = 1;
+	thread.x = 100;
+	thread.y = 1;
+	thread.z = 1;
+	numberDetermine_kernel<<<block, thread>>>(8, 8, d_output_results, d_inferences);
 
 	// 8. Copy inference answers to Host 
 	cudaMemcpy(inferences, d_inferences, sizeof(int) * NUM_TEST, cudaMemcpyDeviceToHost);
