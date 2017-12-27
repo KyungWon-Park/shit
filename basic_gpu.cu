@@ -443,9 +443,9 @@ void forward_GPU(float **ptr_test_data, int **ptr_test_label, __map__ *map, int 
 	//cudaMemcpyToSymbol(D_NUM_TEST, &d_NUM_TEST, sizeof(int), 0, cudaMemcpyHostToDevice);
 	//cudaMemcpyToSymbol(D_BATCH_SIZE, &batch_size, sizeof(int), 0, cudaMemcpyHostToDevice);
 	//cudaMemcpyToSymbol(d_map, tmp_map, sizeof(__gpu_map__), 0, cudaMemcpyHostToDevice);
-	cudaMemcpyToSymbol(D_NUM_TEST, &d_NUM_TEST, sizeof(int));
-	cudaMemcpyToSymbol(D_BATCH_SIZE, &batch_size, sizeof(int));
-	cudaMemcpyToSymbol(d_map, tmp_map, sizeof(__gpu_map__));
+	cudaMemcpyToSymbol(D_NUM_TEST, (void *) &d_NUM_TEST, sizeof(int));
+	cudaMemcpyToSymbol(D_BATCH_SIZE, (void *) &batch_size, sizeof(int));
+	cudaMemcpyToSymbol(d_map, (void *) tmp_map, sizeof(__gpu_map__));
 	cudaMemcpy(d_map_spill, tmp_map_spill, sizeof(__gpu_map_spill__), 0, cudaMemcpyHostToDevice);
 
 	// WARNING: FREE 1
