@@ -6,12 +6,24 @@
 #include <assert.h>
 #include "parser.h"
 
-#define BATCH_SIZE 32
+#define BATCH_SIZE 32 
+/* BATCH_SIZE 
+   *
+   * Why use BATCH_SIZE ?
+   *
+   * 0. Saturate Streaming Multiprocessors with enough computaion BLOCKS
+   * 1. Saturate Video RAM with enough computaional jobs
+   * 
+   * CRITERIA:
+   * 	- Deploy enough blocks (More than n * SM counts) for latency hiding
+   * 	- Saturate each block with enough threads 
+   */
 
-/*
+/* 				NVIDIA GEFORCE GTX1080
    * GPU SPEC:
    * 	- warp_size: 32 threads
    * 	- word_size: 4 Bytes
+   * 	- SM_count: 20 Streaming Multiprocessors
    * 	
    * SM SPEC: 
    * 	- max_warps: 64
@@ -39,11 +51,11 @@
  * 	=> Put as much as we can into constant memory (d_map), but leftover should go to global memory (d_map_spill)
  *
  * 2. Result data 
- * 	=> Should go to global memory 
+ * 	=> Should go to global memory since write-once
  *
  * 3. What to cache into shared memory?
  * 	=> Bring Filter map data into shared_memory (only necessary part)
- * 	=> Bring INPUT / OUTPUT data into shared_memory (only necessary part)
+ * 	=> Bring INPUT data into shared_memory (only necessary part)
  *
  */
 
@@ -57,7 +69,7 @@ __device__ float sigmoid(float x)
 }
 
 /*
-   * ARGUMENTS
+   * ARGUMENTS:
    * 	- curr_step: Which step are we in? (In MAIN_LOOP)
    * 	- stage: Stage number(ex; 1 means C1 layer, 3 means C3 layer)
    * 	- num_output: Number of output maps 
@@ -65,7 +77,7 @@ __device__ float sigmoid(float x)
    * 	- height_input: Height of input maps 
    * 	- width_input: Width of input maps 
    * 	- size_filter: Size of filter map, 5 for LeNet-5
-   * 	- d_map + d_map_spill: Contains filters for all layers
+   * 	- d_map + d_map_spill: Contains filter maps for all layers
    * 	- inputs: Source of input images 
    * 	- outputs: Destination to store output(computed) images
    * 	- size_input: Length of input 1D array, for fully connected layer
@@ -80,6 +92,82 @@ convolution_kernel(
 	float *inputs, float *outputs
 )
 {
+	int BID_x = blockIdx.x; 	// foreach: output image 	~6 or ~16 
+	int BID_y = blockIdx.y; 	// foreach: BATCH among curr_step_inputs[BATCH_SIZE] 
+	int TID_x = threadIdx.x; 	// foreach: output image row 	~28 or ~10 
+	int TID_y = threadIdx.y; 	// foreach: output image column 	~28 or ~10
+
+	float acc = 0;
+	if (stage == 1)
+	{// C1_layer convolution: D_BATCH_SIZE * { [1 @ 32 * 32] .X [6 * 1 @ 5 * 5] => [6 @ 28 * 28] }
+		// Get the starting point from entire MNIST data set 
+		float *input_start = inputs + (curr_step * D_BATCH_SIZE * (32 * 32)) + (BID_y * 32 * 32);
+
+		// Load data into shared memory
+		__shared__ float input[32][32];
+		for (int i = 0; i < 2; i++)
+		{
+			int rp = 28 * i + TID_x;
+			int cp = 28 * i + TID_y;
+			if (rp < height_input && cp < width_input)
+			{
+				input[rp][cp] = input_start[(32 * rp) + cp];
+			}
+		}
+		__syncthreads();
+		__shared__ float filter[5][5];
+		if (TID_x < size_filter && TID_y < size_filter) 
+		{
+			filter[TID_x][TID_y] = (*d_map).C1_param[BID_x][0][TID_x][TID_y]; 
+		}
+		__syncthreads();
+
+		for (int f_row = 0; f_row < size_filter; f_row++)
+		{
+			for (int f_col = 0; f_col < size_filter; f_col++)
+			{
+				acc += input[TID_x + f_row][TID_y + f_col] * filter[f_row][f_col];
+			}
+		}
+		outputs[(BID_y * 6 * 28 * 28) + (BID_x * 28 * 28) + (TID_x * 28) + TID_y] = acc; 
+	}
+	else // Desired stage = 3
+	{// C3_layer convolution: D_BATCH_SIZE * { [6 @ 14 * 14] .X [16 * 6 @ 5 * 5] => [16 @ 10 * 10] }
+		// Get the starting point from d_s2_results[BATCH_SIZE]
+		float *input_start = inputs + (BID_y * (14 * 14));
+		
+		for (int c = 0; c < num_input; c++)
+		{
+			// Load data into shared memory 
+			__shared__ float input[14][14];
+			for (int i = 0; i < 2; i++)
+			{
+				int rp = 14 * i + TID_x;
+				int cp = 14 * i + TID_y;
+				if (rp < height_input && rp < width_input)
+				{
+					input[rp][cp] = input_start[(32 * rp) + cp];
+				}
+			}
+			__syncthreads();
+			__shared__ float filter[5][5];
+			if (TID_x < size_filter && TID_y < size_filter)
+			{
+				filter[TID_x][TID_y] = (*d_map).C3_param[BID_x][c][TID_x][TID_y];
+			}
+			__syncthreads();
+
+			for (int f_row = 0; f_row < size_filter; f_row++)
+			{
+				for (int f_col = 0; f_col < size_filter; f_col++)
+				{
+					acc += input[TID_x + f_row][TID_y + f_col] * filter[f_row][f_col];
+				}
+			}
+		}
+		outputs[(BID_y * 16 * 10 * 10) + (BID_x * 10 * 10) + (TID_x * 10) + TID_y];
+	}
+
 	return;
 }
 
@@ -91,6 +179,12 @@ pooling_kernel(
 	float *inputs, float *outputs 
 )
 {
+	if (stage == 2)
+	{// S2_layer pooling: D_BATCH_SIZE * { Sigmoid([6 @ 28 * 28] + bias[6]) => [6 @ 14 * 14] }
+	}
+	else // Desired stage = 4
+	{// S4_layer pooling: D_BATCH_SIZE * { Sigmoid([16 @ 10 * 10] + bias[16]) => [16 @ 5 * 5] }
+	}
 	return;
 }
 
@@ -102,6 +196,12 @@ fullyConnect_kernel(
 	float *inputs, float *outputs 
 )
 {
+	if (stage == 5)
+	{// F5_layer full connection: D_BATCH_SIZE * { Sigmoid([120 * 400] X Serial[16 @ 5 * 5] + bias[120 * 1]) => [120 * 1] }
+	}
+	else // Desired stage = 6
+	{// F6_layer full connection: D_BATCH_SIZE * { Sigmoid([84 * 120] X [120 * 1] + bias[84 * 1]) => [84 * 1] }
+	}
 	return;
 }
 
@@ -113,6 +213,7 @@ output_kernel(
 	float *inputs, float *outputs
 )
 {
+	// OUTPUT_layer: D_BATCH_SIZE * { [10 * 84] X [84 * 1] + [10 * 1] => [10 * 1] }
 	return;
 }
 
@@ -122,6 +223,7 @@ numberDetermine_kernel(
 	float *inputs, int *outputs
 )
 {
+	// NUMBER_layer: D_BATCH_SIZE * { ReduceMax[10 * 1] => SINGLE_DIGIT }
 	return;
 }
 
